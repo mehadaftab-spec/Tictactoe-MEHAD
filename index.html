@@ -105,11 +105,11 @@ body {
 	color: #ffffff;
 	box-shadow: 0 8px 24px rgba(0, 0, 0, 0.34);
 	cursor: pointer;
-	font-size: 14px;
+	font-size: 12px;
 	font-weight: 700;
 	line-height: 1;
-	min-height: 42px;
-	padding: 0 14px;
+	min-height: 34px;
+	padding: 0 10px;
 	pointer-events: auto;
 	touch-action: manipulation;
 	white-space: nowrap;
@@ -120,39 +120,21 @@ body {
 	outline-offset: 3px;
 }
 
-.audio-control-button.is-off {
-	background: rgba(83, 21, 28, 0.84);
-	border-color: rgba(255, 150, 150, 0.45);
-}
-
 #audio-unlock {
-	left: 50%;
+	left: max(10px, env(safe-area-inset-left));
 	position: absolute;
-	top: max(12px, env(safe-area-inset-top));
-	transform: translateX(-50%);
+	top: max(10px, env(safe-area-inset-top));
 }
 
 #audio-unlock.is-hidden {
 	display: none;
 }
 
-#audio-toggles {
-	bottom: max(12px, env(safe-area-inset-bottom));
-	display: flex;
-	gap: 8px;
-	position: absolute;
-	right: max(12px, env(safe-area-inset-right));
-}
-
 @media (max-width: 520px) {
 	.audio-control-button {
-		font-size: 12px;
-		min-height: 38px;
-		padding: 0 10px;
-	}
-
-	#audio-toggles {
-		gap: 6px;
+		font-size: 11px;
+		min-height: 30px;
+		padding: 0 8px;
 	}
 }
 		</style>
@@ -176,11 +158,7 @@ body {
 		</div>
 
 		<div id="audio-ui" aria-label="Audio controls">
-			<button id="audio-unlock" class="audio-control-button" type="button">Tap here for music</button>
-			<div id="audio-toggles">
-				<button id="music-toggle" class="audio-control-button" type="button">Music On</button>
-				<button id="sfx-toggle" class="audio-control-button" type="button">SFX On</button>
-			</div>
+			<button id="audio-unlock" class="audio-control-button" type="button">Enable music</button>
 		</div>
 
 		<script>
@@ -226,18 +204,8 @@ body {
 	}
 
 	function updateButtons() {
-		const musicButton = getButton('music-toggle');
-		const sfxButton = getButton('sfx-toggle');
-		if (musicButton) {
-			musicButton.textContent = audioState.music ? 'Music On' : 'Music Off';
-			musicButton.classList.toggle('is-off', !audioState.music);
-			musicButton.setAttribute('aria-pressed', String(audioState.music));
-		}
-		if (sfxButton) {
-			sfxButton.textContent = audioState.sfx ? 'SFX On' : 'SFX Off';
-			sfxButton.classList.toggle('is-off', !audioState.sfx);
-			sfxButton.setAttribute('aria-pressed', String(audioState.sfx));
-		}
+		document.documentElement.dataset.music = audioState.music ? 'on' : 'off';
+		document.documentElement.dataset.sfx = audioState.sfx ? 'on' : 'off';
 	}
 
 	function updateUnlockButton() {
@@ -246,7 +214,7 @@ body {
 			return;
 		}
 		const hasRunningAudio = audioState.contexts.some((context) => context.state === 'running');
-		unlockButton.classList.toggle('is-hidden', hasRunningAudio);
+		unlockButton.classList.toggle('is-hidden', audioState.userRequestedAudio || hasRunningAudio);
 	}
 
 	function resumeContexts() {
@@ -258,6 +226,43 @@ body {
 			return context.resume().catch(() => undefined);
 		});
 		return Promise.all(resumeJobs).then(updateUnlockButton);
+	}
+
+	function toggleMusic() {
+		audioState.music = !audioState.music;
+		localStorage.setItem('ttt_music_enabled', String(audioState.music));
+		refreshGains();
+		updateButtons();
+	}
+
+	function toggleSfx() {
+		audioState.sfx = !audioState.sfx;
+		localStorage.setItem('ttt_sfx_enabled', String(audioState.sfx));
+		refreshGains();
+		updateButtons();
+	}
+
+	function getTopRightAudioHotspot(event) {
+		const width = window.innerWidth || document.documentElement.clientWidth;
+		const height = window.innerHeight || document.documentElement.clientHeight;
+		const topLimit = Math.max(70, Math.min(110, height * 0.12));
+		if (event.clientY > topLimit) {
+			return null;
+		}
+
+		const buttonWidth = Math.min(66, Math.max(46, width * 0.075));
+		const gap = Math.max(6, width * 0.01);
+		const rightPad = Math.max(12, width * 0.035);
+		const sfxLeft = width - rightPad - buttonWidth;
+		const musicLeft = sfxLeft - gap - buttonWidth;
+
+		if (event.clientX >= musicLeft && event.clientX <= musicLeft + buttonWidth) {
+			return 'music';
+		}
+		if (event.clientX >= sfxLeft && event.clientX <= sfxLeft + buttonWidth) {
+			return 'sfx';
+		}
+		return null;
 	}
 
 	function registerContext(context) {
@@ -323,8 +328,6 @@ body {
 
 	function bindAudioControls() {
 		const unlockButton = getButton('audio-unlock');
-		const musicButton = getButton('music-toggle');
-		const sfxButton = getButton('sfx-toggle');
 
 		function stopGameClick(event) {
 			event.preventDefault();
@@ -337,26 +340,17 @@ body {
 				resumeContexts();
 			});
 		}
-		if (musicButton) {
-			musicButton.addEventListener('click', (event) => {
-				stopGameClick(event);
-				audioState.music = !audioState.music;
-				localStorage.setItem('ttt_music_enabled', String(audioState.music));
-				refreshGains();
-				updateButtons();
-				resumeContexts();
-			});
-		}
-		if (sfxButton) {
-			sfxButton.addEventListener('click', (event) => {
-				stopGameClick(event);
-				audioState.sfx = !audioState.sfx;
-				localStorage.setItem('ttt_sfx_enabled', String(audioState.sfx));
-				refreshGains();
-				updateButtons();
-				resumeContexts();
-			});
-		}
+		document.addEventListener('pointerdown', () => {
+			resumeContexts();
+		}, { capture: true, once: true });
+		document.addEventListener('pointerup', (event) => {
+			const hotspot = getTopRightAudioHotspot(event);
+			if (hotspot === 'music') {
+				toggleMusic();
+			} else if (hotspot === 'sfx') {
+				toggleSfx();
+			}
+		}, true);
 		updateButtons();
 		updateUnlockButton();
 	}
