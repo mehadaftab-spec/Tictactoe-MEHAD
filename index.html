@@ -93,51 +93,26 @@ body {
 #audio-ui {
 	position: fixed;
 	inset: 0;
-	z-index: 9999;
+	z-index: 20;
 	pointer-events: none;
 	font-family: Arial, Helvetica, sans-serif;
 }
 
 .audio-control-button {
-	align-items: center;
-	border: 2px solid rgba(151, 112, 47, 0.85);
-	border-radius: 999px;
-	background: linear-gradient(180deg, rgba(35, 101, 45, 0.95), rgba(20, 73, 31, 0.96));
+	border: 1px solid rgba(255, 255, 255, 0.28);
+	border-radius: 8px;
+	background: rgba(0, 0, 0, 0.72);
 	color: #ffffff;
-	box-shadow: 0 8px 24px rgba(0, 0, 0, 0.42);
+	box-shadow: 0 8px 24px rgba(0, 0, 0, 0.34);
 	cursor: pointer;
-	display: inline-flex;
-	font-size: 11px;
-	font-weight: 800;
-	gap: 8px;
-	justify-content: center;
+	font-size: 12px;
+	font-weight: 700;
 	line-height: 1;
-	min-height: 32px;
-	min-width: 86px;
+	min-height: 34px;
 	padding: 0 10px;
 	pointer-events: auto;
 	touch-action: manipulation;
 	white-space: nowrap;
-}
-
-.audio-control-button::before {
-	background: #ffffff;
-	border-radius: 999px;
-	box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
-	content: "";
-	height: 14px;
-	width: 14px;
-}
-
-.audio-control-button.is-off {
-	background: linear-gradient(180deg, rgba(70, 70, 70, 0.96), rgba(38, 38, 38, 0.97));
-	border-color: rgba(130, 130, 130, 0.86);
-	color: rgba(230, 230, 230, 0.86);
-	filter: grayscale(1);
-}
-
-.audio-control-button.is-off::before {
-	background: #b8b8b8;
 }
 
 .audio-control-button:focus-visible {
@@ -145,17 +120,10 @@ body {
 	outline-offset: 3px;
 }
 
-#html-music-toggle {
-	position: absolute;
-	right: calc(max(12px, env(safe-area-inset-right)) + 70px);
-	top: max(12px, env(safe-area-inset-top));
-}
-
 #audio-unlock {
 	left: max(10px, env(safe-area-inset-left));
 	position: absolute;
 	top: max(10px, env(safe-area-inset-top));
-	min-width: 106px;
 }
 
 #audio-unlock.is-hidden {
@@ -164,19 +132,9 @@ body {
 
 @media (max-width: 520px) {
 	.audio-control-button {
-		font-size: 10px;
-		min-height: 28px;
-		min-width: 76px;
-		padding: 0 7px;
-	}
-
-	.audio-control-button::before {
-		height: 12px;
-		width: 12px;
-	}
-
-	#html-music-toggle {
-		right: calc(max(12px, env(safe-area-inset-right)) + 62px);
+		font-size: 11px;
+		min-height: 30px;
+		padding: 0 8px;
 	}
 }
 		</style>
@@ -200,7 +158,6 @@ body {
 		</div>
 
 		<div id="audio-ui" aria-label="Audio controls">
-			<button id="html-music-toggle" class="audio-control-button" type="button" aria-pressed="true">MUSIC ON</button>
 			<button id="audio-unlock" class="audio-control-button" type="button">Enable music</button>
 		</div>
 
@@ -249,12 +206,6 @@ body {
 	function updateButtons() {
 		document.documentElement.dataset.music = audioState.music ? 'on' : 'off';
 		document.documentElement.dataset.sfx = audioState.sfx ? 'on' : 'off';
-		const musicButton = getButton('html-music-toggle');
-		if (musicButton) {
-			musicButton.textContent = audioState.music ? 'MUSIC ON' : 'MUSIC OFF';
-			musicButton.setAttribute('aria-pressed', String(audioState.music));
-			musicButton.classList.toggle('is-off', !audioState.music);
-		}
 	}
 
 	function updateUnlockButton() {
@@ -263,15 +214,11 @@ body {
 			return;
 		}
 		const hasRunningAudio = audioState.contexts.some((context) => context.state === 'running');
-		unlockButton.classList.toggle('is-hidden', !audioState.music || audioState.userRequestedAudio || hasRunningAudio);
+		unlockButton.classList.toggle('is-hidden', audioState.userRequestedAudio || hasRunningAudio);
 	}
 
 	function resumeContexts() {
 		audioState.userRequestedAudio = true;
-		if (!audioState.music) {
-			updateUnlockButton();
-			return Promise.resolve();
-		}
 		const resumeJobs = audioState.contexts.map((context) => {
 			if (context.state === 'running') {
 				return Promise.resolve();
@@ -281,26 +228,11 @@ body {
 		return Promise.all(resumeJobs).then(updateUnlockButton);
 	}
 
-	function suspendContexts() {
-		const suspendJobs = audioState.contexts.map((context) => {
-			if (context.state !== 'running') {
-				return Promise.resolve();
-			}
-			return context.suspend().catch(() => undefined);
-		});
-		return Promise.all(suspendJobs).then(updateUnlockButton);
-	}
-
 	function toggleMusic() {
 		audioState.music = !audioState.music;
 		localStorage.setItem('ttt_music_enabled', String(audioState.music));
 		refreshGains();
 		updateButtons();
-		if (audioState.music) {
-			resumeContexts();
-		} else {
-			suspendContexts();
-		}
 	}
 
 	function toggleSfx() {
@@ -395,7 +327,6 @@ body {
 	}
 
 	function bindAudioControls() {
-		const musicButton = getButton('html-music-toggle');
 		const unlockButton = getButton('audio-unlock');
 
 		function stopGameClick(event) {
@@ -403,20 +334,7 @@ body {
 			event.stopPropagation();
 		}
 
-		function stopGamePointer(event) {
-			event.stopPropagation();
-		}
-
-		if (musicButton) {
-			musicButton.addEventListener('pointerdown', stopGamePointer);
-			musicButton.addEventListener('click', (event) => {
-				stopGameClick(event);
-				toggleMusic();
-			});
-		}
-
 		if (unlockButton) {
-			unlockButton.addEventListener('pointerdown', stopGamePointer);
 			unlockButton.addEventListener('click', (event) => {
 				stopGameClick(event);
 				resumeContexts();
@@ -425,10 +343,15 @@ body {
 		document.addEventListener('pointerdown', () => {
 			resumeContexts();
 		}, { capture: true, once: true });
+		document.addEventListener('pointerup', (event) => {
+			const hotspot = getTopRightAudioHotspot(event);
+			if (hotspot === 'music') {
+				toggleMusic();
+			} else if (hotspot === 'sfx') {
+				toggleSfx();
+			}
+		}, true);
 		updateButtons();
-		if (!audioState.music) {
-			suspendContexts();
-		}
 		updateUnlockButton();
 	}
 
