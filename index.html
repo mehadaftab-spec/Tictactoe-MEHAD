@@ -89,6 +89,72 @@ body {
 	text-align: center;
 	z-index: 1;
 }
+
+#audio-ui {
+	position: fixed;
+	inset: 0;
+	z-index: 20;
+	pointer-events: none;
+	font-family: Arial, Helvetica, sans-serif;
+}
+
+.audio-control-button {
+	border: 1px solid rgba(255, 255, 255, 0.28);
+	border-radius: 8px;
+	background: rgba(0, 0, 0, 0.72);
+	color: #ffffff;
+	box-shadow: 0 8px 24px rgba(0, 0, 0, 0.34);
+	cursor: pointer;
+	font-size: 14px;
+	font-weight: 700;
+	line-height: 1;
+	min-height: 42px;
+	padding: 0 14px;
+	pointer-events: auto;
+	touch-action: manipulation;
+	white-space: nowrap;
+}
+
+.audio-control-button:focus-visible {
+	outline: 2px solid #ffffff;
+	outline-offset: 3px;
+}
+
+.audio-control-button.is-off {
+	background: rgba(83, 21, 28, 0.84);
+	border-color: rgba(255, 150, 150, 0.45);
+}
+
+#audio-unlock {
+	left: 50%;
+	position: absolute;
+	top: max(12px, env(safe-area-inset-top));
+	transform: translateX(-50%);
+}
+
+#audio-unlock.is-hidden {
+	display: none;
+}
+
+#audio-toggles {
+	bottom: max(12px, env(safe-area-inset-bottom));
+	display: flex;
+	gap: 8px;
+	position: absolute;
+	right: max(12px, env(safe-area-inset-right));
+}
+
+@media (max-width: 520px) {
+	.audio-control-button {
+		font-size: 12px;
+		min-height: 38px;
+		padding: 0 10px;
+	}
+
+	#audio-toggles {
+		gap: 6px;
+	}
+}
 		</style>
 		<link id="-gd-engine-icon" rel="icon" type="image/png" href="index.icon.png" />
 <link rel="apple-touch-icon" href="index.apple-touch-icon.png"/>
@@ -109,6 +175,198 @@ body {
 			<div id="status-notice"></div>
 		</div>
 
+		<div id="audio-ui" aria-label="Audio controls">
+			<button id="audio-unlock" class="audio-control-button" type="button">Tap here for music</button>
+			<div id="audio-toggles">
+				<button id="music-toggle" class="audio-control-button" type="button">Music On</button>
+				<button id="sfx-toggle" class="audio-control-button" type="button">SFX On</button>
+			</div>
+		</div>
+
+		<script>
+(function () {
+	const MUSIC_MIN_DURATION_SECONDS = 6;
+	const audioState = {
+		contexts: [],
+		gains: {
+			music: new Set(),
+			sfx: new Set(),
+		},
+		music: localStorage.getItem('ttt_music_enabled') !== 'false',
+		sfx: localStorage.getItem('ttt_sfx_enabled') !== 'false',
+		userRequestedAudio: false,
+	};
+
+	window.__tttAudioState = audioState;
+
+	function getButton(id) {
+		return document.getElementById(id);
+	}
+
+	function classifySource(source) {
+		const buffer = source.buffer;
+		const duration = buffer && Number.isFinite(buffer.duration) ? buffer.duration : 0;
+		return source.loop || duration >= MUSIC_MIN_DURATION_SECONDS ? 'music' : 'sfx';
+	}
+
+	function applyGain(gain, enabled) {
+		const value = enabled ? 1 : 0;
+		try {
+			const now = gain.context.currentTime;
+			gain.gain.cancelScheduledValues(now);
+			gain.gain.setTargetAtTime(value, now, 0.015);
+		} catch (err) {
+			gain.gain.value = value;
+		}
+	}
+
+	function refreshGains() {
+		audioState.gains.music.forEach((gain) => applyGain(gain, audioState.music));
+		audioState.gains.sfx.forEach((gain) => applyGain(gain, audioState.sfx));
+	}
+
+	function updateButtons() {
+		const musicButton = getButton('music-toggle');
+		const sfxButton = getButton('sfx-toggle');
+		if (musicButton) {
+			musicButton.textContent = audioState.music ? 'Music On' : 'Music Off';
+			musicButton.classList.toggle('is-off', !audioState.music);
+			musicButton.setAttribute('aria-pressed', String(audioState.music));
+		}
+		if (sfxButton) {
+			sfxButton.textContent = audioState.sfx ? 'SFX On' : 'SFX Off';
+			sfxButton.classList.toggle('is-off', !audioState.sfx);
+			sfxButton.setAttribute('aria-pressed', String(audioState.sfx));
+		}
+	}
+
+	function updateUnlockButton() {
+		const unlockButton = getButton('audio-unlock');
+		if (!unlockButton) {
+			return;
+		}
+		const hasRunningAudio = audioState.contexts.some((context) => context.state === 'running');
+		unlockButton.classList.toggle('is-hidden', hasRunningAudio);
+	}
+
+	function resumeContexts() {
+		audioState.userRequestedAudio = true;
+		const resumeJobs = audioState.contexts.map((context) => {
+			if (context.state === 'running') {
+				return Promise.resolve();
+			}
+			return context.resume().catch(() => undefined);
+		});
+		return Promise.all(resumeJobs).then(updateUnlockButton);
+	}
+
+	function registerContext(context) {
+		if (context.__tttRegistered) {
+			return context;
+		}
+		context.__tttRegistered = true;
+		patchSourceRouting();
+		audioState.contexts.push(context);
+		if (typeof context.addEventListener === 'function') {
+			context.addEventListener('statechange', updateUnlockButton);
+		}
+		if (audioState.userRequestedAudio && context.state !== 'running') {
+			context.resume().catch(() => undefined).then(updateUnlockButton);
+		}
+		updateUnlockButton();
+		return context;
+	}
+
+	function patchAudioContext(key) {
+		const NativeAudioContext = window[key];
+		if (!NativeAudioContext || NativeAudioContext.__tttWrapped) {
+			return;
+		}
+		function WrappedAudioContext() {
+			const context = new NativeAudioContext(...Array.from(arguments));
+			return registerContext(context);
+		}
+		Object.setPrototypeOf(WrappedAudioContext, NativeAudioContext);
+		WrappedAudioContext.prototype = NativeAudioContext.prototype;
+		WrappedAudioContext.__tttWrapped = true;
+		window[key] = WrappedAudioContext;
+	}
+
+	function patchSourceRouting() {
+		const SourceNode = window.AudioBufferSourceNode;
+		if (!SourceNode || SourceNode.prototype.__tttRoutingPatched) {
+			return;
+		}
+		const nativeConnect = SourceNode.prototype.connect;
+		SourceNode.prototype.connect = function () {
+			const destination = arguments[0];
+			const isAudioParam = window.AudioParam && destination instanceof AudioParam;
+			const isPositionWorklet = destination && destination.constructor && destination.constructor.name === 'AudioWorkletNode';
+			if (!destination || isAudioParam || isPositionWorklet || !this.buffer) {
+				return nativeConnect.apply(this, arguments);
+			}
+
+			const connectArgs = Array.prototype.slice.call(arguments, 1);
+			if (!this.__tttRoutingGain) {
+				const category = classifySource(this);
+				const gain = this.context.createGain();
+				this.__tttRoutingGain = gain;
+				this.__tttAudioCategory = category;
+				audioState.gains[category].add(gain);
+				applyGain(gain, audioState[category]);
+				nativeConnect.call(this, gain);
+			}
+			return this.__tttRoutingGain.connect(destination, ...connectArgs);
+		};
+		SourceNode.prototype.__tttRoutingPatched = true;
+	}
+
+	function bindAudioControls() {
+		const unlockButton = getButton('audio-unlock');
+		const musicButton = getButton('music-toggle');
+		const sfxButton = getButton('sfx-toggle');
+
+		function stopGameClick(event) {
+			event.preventDefault();
+			event.stopPropagation();
+		}
+
+		if (unlockButton) {
+			unlockButton.addEventListener('click', (event) => {
+				stopGameClick(event);
+				resumeContexts();
+			});
+		}
+		if (musicButton) {
+			musicButton.addEventListener('click', (event) => {
+				stopGameClick(event);
+				audioState.music = !audioState.music;
+				localStorage.setItem('ttt_music_enabled', String(audioState.music));
+				refreshGains();
+				updateButtons();
+				resumeContexts();
+			});
+		}
+		if (sfxButton) {
+			sfxButton.addEventListener('click', (event) => {
+				stopGameClick(event);
+				audioState.sfx = !audioState.sfx;
+				localStorage.setItem('ttt_sfx_enabled', String(audioState.sfx));
+				refreshGains();
+				updateButtons();
+				resumeContexts();
+			});
+		}
+		updateButtons();
+		updateUnlockButton();
+	}
+
+	patchAudioContext('AudioContext');
+	patchAudioContext('webkitAudioContext');
+	patchSourceRouting();
+	bindAudioControls();
+}());
+		</script>
 		<script src="index.js"></script>
 		<script>
 const GODOT_CONFIG = {"args":[],"canvasResizePolicy":2,"emscriptenPoolSize":8,"ensureCrossOriginIsolationHeaders":true,"executable":"index","experimentalVK":false,"fileSizes":{"index.pck":1858200,"index.wasm":35749181},"focusCanvas":true,"gdextensionLibs":[],"godotPoolSize":4};
@@ -217,4 +475,3 @@ const engine = new Engine(GODOT_CONFIG);
 		</script>
 	</body>
 </html>
-
