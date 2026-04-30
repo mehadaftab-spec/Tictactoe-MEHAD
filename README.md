@@ -31,7 +31,8 @@ The game is exported using Godot’s Web (HTML5) export and hosted via GitHub Pa
 
 ##Issues
 - Browser restrictions may prevent audio from autoplaying,user interaction may be required to start sound.The main menu music and sfx on/ off button not working currently, will fixed it soon.
-- update 30th april 4:53 pm ist fixe3d the minor issue of music om off button not working by changing the index.html
+- update 30th april 5:00 pm ist fixe3d the minor issue of music om off button not working by changing the index.html.Tje problem still presist will try to fix it in a new branch
+  
 - Some icon symbols may not render correctly in the web version due to font limitations.
 
 ## Project Status
