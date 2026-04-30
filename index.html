@@ -125,26 +125,21 @@ body {
 	gap: 12px;
 	position: absolute;
 	right: max(20px, env(safe-area-inset-right));
-	top: max(12px, env(safe-area-inset-top));
+	top: max(36px, calc(env(safe-area-inset-top) + 36px));
 }
 
 .audio-switch {
 	align-items: center;
 	background: transparent;
 	border: 0;
-	color: #f6d58c;
 	cursor: pointer;
-	display: flex;
-	flex-direction: column;
-	font-size: 10px;
-	font-weight: 800;
-	gap: 3px;
-	letter-spacing: 0;
-	line-height: 1;
+	display: block;
+	height: 24px;
+	overflow: hidden;
 	padding: 0;
 	pointer-events: auto;
-	text-transform: uppercase;
 	touch-action: manipulation;
+	width: 52px;
 }
 
 .audio-switch:focus-visible {
@@ -153,12 +148,13 @@ body {
 }
 
 .audio-switch-track {
-	background: #2fba69;
+	background: #6b6b6b;
 	border: 1px solid rgba(255, 255, 255, 0.42);
 	border-radius: 999px;
 	box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.16), 0 3px 8px rgba(0, 0, 0, 0.25);
 	display: block;
 	height: 24px;
+	opacity: 0;
 	position: relative;
 	width: 52px;
 }
@@ -177,7 +173,7 @@ body {
 }
 
 .audio-switch.is-off .audio-switch-track {
-	background: #6b6b6b;
+	opacity: 1;
 }
 
 .audio-switch.is-off .audio-switch-thumb {
@@ -195,13 +191,10 @@ body {
 	#audio-switches {
 		gap: 11px;
 		right: max(22px, env(safe-area-inset-right));
-		top: max(12px, env(safe-area-inset-top));
+		top: max(34px, calc(env(safe-area-inset-top) + 34px));
 	}
 
-	.audio-switch {
-		font-size: 9px;
-	}
-
+	.audio-switch,
 	.audio-switch-track {
 		height: 23px;
 		width: 52px;
@@ -236,11 +229,9 @@ body {
 			<div id="audio-prompt">Tap anywhere to enable sound</div>
 			<div id="audio-switches">
 				<button id="music-toggle" class="audio-switch" type="button" aria-label="Toggle music">
-					<span>Music</span>
 					<span class="audio-switch-track"><span class="audio-switch-thumb"></span></span>
 				</button>
 				<button id="sfx-toggle" class="audio-switch" type="button" aria-label="Toggle SFX">
-					<span>SFX</span>
 					<span class="audio-switch-track"><span class="audio-switch-thumb"></span></span>
 				</button>
 			</div>
