@@ -1,3 +1,16 @@
+
+🚨 ATTENTION 🚨
+A fixed final version of this game has been deployed via a new repository.
+All major bugs have been resolved in this version.
+🎮 Play the game here:
+👉 https://mehadaftab-spec.github.io/Tictactoe-fixed-final-version-/
+📁 New repository:
+👉 https://github.com/mehadaftab-spec/Tictactoe-fixed-final-version-
+⚠️ Please refer to the new repository for the latest and stable version of the game
+
+
+
+
 # Tic Tac Toe (Godot Web Build)
 
 ## Overview
